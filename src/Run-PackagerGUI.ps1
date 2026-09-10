@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     CG Technology Intune App Packager - Interactive Desktop GUI
 .DESCRIPTION
@@ -6,7 +6,7 @@
     detection scripts for Microsoft Intune.
 #>
 
-Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
+Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Windows.Forms
 
 [xml]$xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -147,25 +147,49 @@ function Append-Log([string]$msg) {
 Append-Log "Intune App Packager Studio ready."
 Append-Log "Select a source folder and installer executable to begin."
 
+function Select-FolderDialog([string]$description, [string]$initialPath) {
+    try {
+        $fbd = New-Object System.Windows.Forms.FolderBrowserDialog
+        $fbd.Description = $description
+        $fbd.ShowNewFolderButton = $true
+        if ($initialPath -and (Test-Path $initialPath)) {
+            $fbd.SelectedPath = $initialPath
+        }
+        if ($fbd.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+            return $fbd.SelectedPath
+        }
+    }
+    catch {
+        # Fallback to Shell.Application COM object if WinForms has issues
+        try {
+            $shell = New-Object -ComObject Shell.Application
+            $folder = $shell.BrowseForFolder(0, $description, 0, 0)
+            if ($folder) {
+                return $folder.Self.Path
+            }
+        } catch {}
+    }
+    return $null
+}
+
 # Browse Source Folder
 $btnBrowseSource.Add_Click({
-    $fbd = New-Object System.Windows.Forms.FolderBrowserDialog
-    $fbd.Description = "Select Source Folder containing Installer"
-    if ($fbd.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-        $txtSourceFolder.Text = $fbd.SelectedPath
-        Append-Log "Selected source directory: $($fbd.SelectedPath)"
+    $selected = Select-FolderDialog "Select Source Folder containing Installer" $txtSourceFolder.Text
+    if ($selected) {
+        $txtSourceFolder.Text = $selected
+        Append-Log "Selected source directory: $selected"
     }
 })
 
 # Browse Setup File
 $btnBrowseSetup.Add_Click({
-    $ofd = New-Object System.Windows.Forms.OpenFileDialog
+    $ofd = New-Object Microsoft.Win32.OpenFileDialog
     $ofd.Title = "Select Setup Executable or MSI"
     $ofd.Filter = "Installers (*.exe;*.msi)|*.exe;*.msi|All Files (*.*)|*.*"
     if ($txtSourceFolder.Text -and (Test-Path $txtSourceFolder.Text)) {
         $ofd.InitialDirectory = $txtSourceFolder.Text
     }
-    if ($ofd.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+    if ($ofd.ShowDialog($window) -eq $true) {
         $file = $ofd.FileName
         $dir = [System.IO.Path]::GetDirectoryName($file)
         $fileName = [System.IO.Path]::GetFileName($file)
@@ -180,11 +204,10 @@ $btnBrowseSetup.Add_Click({
 
 # Browse Output Folder
 $btnBrowseOutput.Add_Click({
-    $fbd = New-Object System.Windows.Forms.FolderBrowserDialog
-    $fbd.Description = "Select Output Folder for .intunewin and Detection Script"
-    if ($fbd.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-        $txtOutputFolder.Text = $fbd.SelectedPath
-        Append-Log "Selected output directory: $($fbd.SelectedPath)"
+    $selected = Select-FolderDialog "Select Output Folder for .intunewin and Detection Script" $txtOutputFolder.Text
+    if ($selected) {
+        $txtOutputFolder.Text = $selected
+        Append-Log "Selected output directory: $selected"
     }
 })
 
