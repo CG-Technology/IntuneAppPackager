@@ -42,6 +42,7 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
@@ -93,8 +94,23 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
             </Grid>
         </Border>
 
+        <!-- Progress Bar & Active Status Strip -->
+        <Border Grid.Row="2" x:Name="BorderProgress" Visibility="Collapsed" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="14,12" Margin="0,0,0,14">
+            <StackPanel>
+                <Grid Margin="0,0,0,8">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Ellipse Width="8" Height="8" Fill="#818CF8" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock x:Name="TxtStatus" Text="Packaging application in progress..." FontSize="12" FontWeight="SemiBold" Foreground="#F8FAFC"/>
+                    </StackPanel>
+                    <TextBlock x:Name="TxtElapsed" Text="00:00" FontSize="12" FontWeight="Bold" Foreground="#818CF8" HorizontalAlignment="Right"/>
+                </Grid>
+                <ProgressBar x:Name="ProgressBar" Height="6" IsIndeterminate="True" 
+                             Background="#111827" Foreground="#6366F1" BorderBrush="#334155" BorderThickness="1"/>
+            </StackPanel>
+        </Border>
+
         <!-- Log Output Console -->
-        <Border Grid.Row="2" Background="#060911" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="12">
+        <Border Grid.Row="3" Background="#060911" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="12">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -106,7 +122,7 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
         </Border>
 
         <!-- Footer -->
-        <Grid Grid.Row="3" Margin="0,16,0,0">
+        <Grid Grid.Row="4" Margin="0,16,0,0">
             <TextBlock Text="CG Technology | https://cg-technology.github.io" FontSize="12" Foreground="#475569" VerticalAlignment="Center"/>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button x:Name="BtnOpenOutput" Content="Open Output Folder" Margin="0,0,10,0"/>
@@ -129,6 +145,10 @@ $txtOutputFolder   = $window.FindName("TxtOutputFolder")
 $btnBrowseOutput   = $window.FindName("BtnBrowseOutput")
 $chkSkipPackaging  = $window.FindName("ChkSkipPackaging")
 $btnStartPackaging = $window.FindName("BtnStartPackaging")
+$borderProgress    = $window.FindName("BorderProgress")
+$txtStatus         = $window.FindName("TxtStatus")
+$txtElapsed        = $window.FindName("TxtElapsed")
+$progressBar       = $window.FindName("ProgressBar")
 $txtConsoleLog     = $window.FindName("TxtConsoleLog")
 $btnOpenOutput     = $window.FindName("BtnOpenOutput")
 $btnClearLog       = $window.FindName("BtnClearLog")
@@ -249,9 +269,14 @@ $btnStartPackaging.Add_Click({
     }
 
     $btnStartPackaging.IsEnabled = $false
+    $borderProgress.Visibility = [System.Windows.Visibility]::Visible
+    $txtStatus.Text = "Initializing packaging workflow..."
+    $txtElapsed.Text = "00:00"
+
+    Append-Log "=================================================="
     Append-Log "Starting packaging workflow..."
     Append-Log "Source: $src"
-    Append-Log "Setup: $setup"
+    Append-Log "Setup:  $setup"
     Append-Log "Output: $out"
 
     try {
@@ -265,40 +290,101 @@ $btnStartPackaging.Add_Click({
             $cliArgs += "-SkipPackaging"
         }
 
-        # Run CLI in PowerShell process capturing output
-        $procInfo = New-Object System.Diagnostics.ProcessStartInfo
-        $procInfo.FileName = "powershell.exe"
-        $procInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$cliScript`" $($cliArgs -join ' ')"
-        $procInfo.RedirectStandardOutput = $true
-        $procInfo.RedirectStandardError = $true
-        $procInfo.UseShellExecute = $false
-        $procInfo.CreateNoWindow = $true
+        $tempOut = [System.IO.Path]::GetTempFileName()
+        $tempErr = [System.IO.Path]::GetTempFileName()
 
-        $proc = [System.Diagnostics.Process]::Start($procInfo)
-        $stdout = $proc.StandardOutput.ReadToEnd()
-        $stderr = $proc.StandardError.ReadToEnd()
-        $proc.WaitForExit()
+        $proc = Start-Process -FilePath "powershell.exe" `
+            -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$cliScript`" $($cliArgs -join ' ')" `
+            -RedirectStandardOutput $tempOut `
+            -RedirectStandardError $tempErr `
+            -PassThru -NoNewWindow
 
-        if ($stdout) {
-            foreach ($line in ($stdout -split "`r?`n")) {
-                if ($line) { Append-Log $line }
+        $outStream = [System.IO.File]::Open($tempOut, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+        $errStream = [System.IO.File]::Open($tempErr, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+        $outReader = New-Object System.IO.StreamReader($outStream, [System.Text.Encoding]::UTF8)
+        $errReader = New-Object System.IO.StreamReader($errStream, [System.Text.Encoding]::UTF8)
+
+        $startTime = [System.DateTime]::Now
+
+        $timer = New-Object System.Windows.Threading.DispatcherTimer
+        $timer.Interval = [System.TimeSpan]::FromMilliseconds(200)
+
+        $timer.Add_Tick({
+            # Update elapsed timer
+            $elapsed = [System.DateTime]::Now - $startTime
+            $txtElapsed.Text = "$($elapsed.Minutes.ToString('00')):$($elapsed.Seconds.ToString('00'))"
+
+            # Stream newly written standard output
+            $newOut = $outReader.ReadToEnd()
+            if ($newOut) {
+                foreach ($line in ($newOut -split "`r?`n")) {
+                    if ($line) {
+                        Append-Log $line
+                        if ($line -match "\[INFO\]\s*(.+)") {
+                            $txtStatus.Text = $Matches[1]
+                        } elseif ($line -match "\[PASS\]\s*(.+)") {
+                            $txtStatus.Text = $Matches[1]
+                        } elseif ($line -match "\[WARN\]\s*(.+)") {
+                            $txtStatus.Text = $Matches[1]
+                        }
+                    }
+                }
             }
-        }
-        if ($stderr) {
-            Append-Log "[STDERR] $stderr"
-        }
 
-        if ($proc.ExitCode -eq 0) {
-            Append-Log "Packaging and detection rule generation complete!"
-            [System.Windows.MessageBox]::Show("Packaging completed successfully!`nArtifacts generated in output directory.", "Success", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
-        } else {
-            Append-Log "Process finished with exit code: $($proc.ExitCode)"
-        }
+            # Stream newly written standard error
+            $newErr = $errReader.ReadToEnd()
+            if ($newErr) {
+                foreach ($line in ($newErr -split "`r?`n")) {
+                    if ($line) {
+                        Append-Log "[STDERR] $line"
+                    }
+                }
+            }
+
+            # Check process completion
+            if ($proc.HasExited) {
+                $timer.Stop()
+
+                # Final read flush
+                $finalOut = $outReader.ReadToEnd()
+                if ($finalOut) {
+                    foreach ($line in ($finalOut -split "`r?`n")) {
+                        if ($line) { Append-Log $line }
+                    }
+                }
+                $finalErr = $errReader.ReadToEnd()
+                if ($finalErr) {
+                    foreach ($line in ($finalErr -split "`r?`n")) {
+                        if ($line) { Append-Log "[STDERR] $line" }
+                    }
+                }
+
+                $outReader.Close()
+                $errReader.Close()
+                $outStream.Close()
+                $errStream.Close()
+
+                Remove-Item $tempOut, $tempErr -Force -ErrorAction SilentlyContinue
+
+                $borderProgress.Visibility = [System.Windows.Visibility]::Collapsed
+                $btnStartPackaging.IsEnabled = $true
+
+                if ($proc.ExitCode -eq 0) {
+                    $totalSec = [Math]::Round(($elapsed).TotalSeconds, 1)
+                    Append-Log "Packaging workflow completed in $totalSec seconds!"
+                    [System.Windows.MessageBox]::Show("Packaging completed successfully in $totalSec seconds!`nArtifacts generated in output directory.", "Success", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
+                } else {
+                    Append-Log "Process finished with exit code: $($proc.ExitCode)"
+                    [System.Windows.MessageBox]::Show("Packaging process finished with error exit code: $($proc.ExitCode)`nReview log for details.", "Packaging Issue", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning)
+                }
+            }
+        })
+
+        $timer.Start()
     }
     catch {
         Append-Log "[ERROR] $($_.Exception.Message)"
-    }
-    finally {
+        $borderProgress.Visibility = [System.Windows.Visibility]::Collapsed
         $btnStartPackaging.IsEnabled = $true
     }
 })
