@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Intune App Packager - Automated Win32 (.intunewin) packager & detection script generator.
 .DESCRIPTION
@@ -79,7 +79,7 @@ function Get-MsiInformation {
 
         $query = "SELECT Property, Value FROM Property"
         $view = $database.GetType().InvokeMember("OpenView", "InvokeMethod", $null, $database, @($query))
-        $view.GetType().InvokeMember("Execute", "InvokeMethod", $null, $view, $null)
+        $null = $view.GetType().InvokeMember("Execute", "InvokeMethod", $null, $view, $null)
 
         while ($record = $view.GetType().InvokeMember("Fetch", "InvokeMethod", $null, $view, $null)) {
             $prop = $record.GetType().InvokeMember("StringData", "GetProperty", $null, $record, @(1))
@@ -406,6 +406,10 @@ $appInfo = if ($ext -eq ".msi") {
     Get-MsiInformation -FilePath $fullSetupPath
 } else {
     Get-ExeInformation -FilePath $fullSetupPath
+}
+
+if ($appInfo -is [array]) {
+    $appInfo = $appInfo | Where-Object { $_ -is [System.Collections.IDictionary] } | Select-Object -Last 1
 }
 
 if ($CustomInstallSwitches) {
