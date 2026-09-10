@@ -36,7 +36,10 @@ param (
     [string]$CustomInstallSwitches,
 
     [Parameter(Mandatory = $false)]
-    [string]$CustomUninstallSwitches
+    [string]$CustomUninstallSwitches,
+
+    [Parameter(Mandatory = $false)]
+    [string]$StatusFile
 )
 
 # Set Strict Mode & Error Handling
@@ -474,3 +477,9 @@ Write-Host " Packaging Workflow Completed Successfully!" -ForegroundColor Green
 Write-Host " Output Directory: $fullOutputPath" -ForegroundColor Yellow
 Write-Host "==================================================================" -ForegroundColor Green
 Write-Host ""
+
+if ($StatusFile) {
+    try {
+        [System.IO.File]::WriteAllText($StatusFile, "0")
+    } catch {}
+}

@@ -290,8 +290,11 @@ $btnStartPackaging.Add_Click({
             $cliArgs += "-SkipPackaging"
         }
 
-        $tempOut = [System.IO.Path]::GetTempFileName()
-        $tempErr = [System.IO.Path]::GetTempFileName()
+        $tempOut    = [System.IO.Path]::GetTempFileName()
+        $tempErr    = [System.IO.Path]::GetTempFileName()
+        $tempStatus = [System.IO.Path]::GetTempFileName()
+
+        $cliArgs += @("-StatusFile", "`"$tempStatus`"")
 
         $proc = Start-Process -FilePath "powershell.exe" `
             -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$cliScript`" $($cliArgs -join ' ')" `
@@ -313,6 +316,7 @@ $btnStartPackaging.Add_Click({
             StartTime  = [System.DateTime]::Now
             TempOut    = $tempOut
             TempErr    = $tempErr
+            TempStatus = $tempStatus
             Timer      = $null
         }
 
@@ -389,7 +393,28 @@ $btnStartPackaging.Add_Click({
                 if ($script:packagingState.OutStream) { $script:packagingState.OutStream.Close() }
                 if ($script:packagingState.ErrStream) { $script:packagingState.ErrStream.Close() }
 
-                Remove-Item $script:packagingState.TempOut, $script:packagingState.TempErr -Force -ErrorAction SilentlyContinue
+                $tempOut    = $script:packagingState.TempOut
+                $tempErr    = $script:packagingState.TempErr
+                $tempStatus = $script:packagingState.TempStatus
+
+                $isSuccess = $false
+                if ($tempStatus -and (Test-Path $tempStatus)) {
+                    $statusVal = ([System.IO.File]::ReadAllText($tempStatus)).Trim()
+                    if ($statusVal -eq "0") {
+                        $isSuccess = $true
+                    }
+                }
+
+                # Resilient fallback checks
+                if (-not $isSuccess) {
+                    if ($proc.ExitCode -eq 0) {
+                        $isSuccess = $true
+                    } elseif ($txtConsoleLog.Text -match "Packaging Workflow Completed Successfully!") {
+                        $isSuccess = $true
+                    }
+                }
+
+                Remove-Item $tempOut, $tempErr, $tempStatus -Force -ErrorAction SilentlyContinue
 
                 $exitCode = $proc.ExitCode
                 $totalSec = [Math]::Round(($elapsed).TotalSeconds, 1)
@@ -399,12 +424,13 @@ $btnStartPackaging.Add_Click({
                 $borderProgress.Visibility = [System.Windows.Visibility]::Collapsed
                 $btnStartPackaging.IsEnabled = $true
 
-                if ($exitCode -eq 0) {
+                if ($isSuccess) {
                     Append-Log "Packaging workflow completed in $totalSec seconds!"
                     [System.Windows.MessageBox]::Show("Packaging completed successfully in $totalSec seconds!`nArtifacts generated in output directory.", "Success", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
                 } else {
-                    Append-Log "Process finished with exit code: $exitCode"
-                    [System.Windows.MessageBox]::Show("Packaging process finished with error exit code: $exitCode`nReview log for details.", "Packaging Issue", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning)
+                    $exitDisplay = if ($exitCode -ne $null) { $exitCode } else { "Non-zero / Error" }
+                    Append-Log "Process finished with status: $exitDisplay"
+                    [System.Windows.MessageBox]::Show("Packaging process encountered an issue (status: $exitDisplay).`nReview log for details.", "Packaging Issue", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning)
                 }
             }
         })
@@ -430,7 +456,7 @@ $window.Add_Closing({
             if ($script:packagingState.ErrReader) { $script:packagingState.ErrReader.Close() }
             if ($script:packagingState.OutStream) { $script:packagingState.OutStream.Close() }
             if ($script:packagingState.ErrStream) { $script:packagingState.ErrStream.Close() }
-            Remove-Item $script:packagingState.TempOut, $script:packagingState.TempErr -Force -ErrorAction SilentlyContinue
+            Remove-Item $script:packagingState.TempOut, $script:packagingState.TempErr, $script:packagingState.TempStatus -Force -ErrorAction SilentlyContinue
         } catch {}
     }
 })
