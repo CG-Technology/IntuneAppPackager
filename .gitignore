@@ -1,0 +1,16 @@
+﻿# Intune Win32 output bundles
+*.intunewin
+*.tmp
+*.log
+
+# Cache & tools
+bin/
+tools/
+IntuneWinAppUtil.exe
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.BIN/
+.DS_Store
