@@ -304,78 +304,107 @@ $btnStartPackaging.Add_Click({
         $outReader = New-Object System.IO.StreamReader($outStream, [System.Text.Encoding]::UTF8)
         $errReader = New-Object System.IO.StreamReader($errStream, [System.Text.Encoding]::UTF8)
 
-        $startTime = [System.DateTime]::Now
+        $script:packagingState = @{
+            Process    = $proc
+            OutStream  = $outStream
+            ErrStream  = $errStream
+            OutReader  = $outReader
+            ErrReader  = $errReader
+            StartTime  = [System.DateTime]::Now
+            TempOut    = $tempOut
+            TempErr    = $tempErr
+            Timer      = $null
+        }
 
         $timer = New-Object System.Windows.Threading.DispatcherTimer
         $timer.Interval = [System.TimeSpan]::FromMilliseconds(200)
+        $script:packagingState.Timer = $timer
 
         $timer.Add_Tick({
+            if (-not $script:packagingState) { return }
+
             # Update elapsed timer
-            $elapsed = [System.DateTime]::Now - $startTime
+            $elapsed = [System.DateTime]::Now - $script:packagingState.StartTime
             $txtElapsed.Text = "$($elapsed.Minutes.ToString('00')):$($elapsed.Seconds.ToString('00'))"
 
             # Stream newly written standard output
-            $newOut = $outReader.ReadToEnd()
-            if ($newOut) {
-                foreach ($line in ($newOut -split "`r?`n")) {
-                    if ($line) {
-                        Append-Log $line
-                        if ($line -match "\[INFO\]\s*(.+)") {
-                            $txtStatus.Text = $Matches[1]
-                        } elseif ($line -match "\[PASS\]\s*(.+)") {
-                            $txtStatus.Text = $Matches[1]
-                        } elseif ($line -match "\[WARN\]\s*(.+)") {
-                            $txtStatus.Text = $Matches[1]
+            $outReader = $script:packagingState.OutReader
+            if ($outReader) {
+                $newOut = $outReader.ReadToEnd()
+                if ($newOut) {
+                    foreach ($line in ($newOut -split "`r?`n")) {
+                        if ($line) {
+                            Append-Log $line
+                            if ($line -match "\[INFO\]\s*(.+)") {
+                                $txtStatus.Text = $Matches[1]
+                            } elseif ($line -match "\[PASS\]\s*(.+)") {
+                                $txtStatus.Text = $Matches[1]
+                            } elseif ($line -match "\[WARN\]\s*(.+)") {
+                                $txtStatus.Text = $Matches[1]
+                            }
                         }
                     }
                 }
             }
 
             # Stream newly written standard error
-            $newErr = $errReader.ReadToEnd()
-            if ($newErr) {
-                foreach ($line in ($newErr -split "`r?`n")) {
-                    if ($line) {
-                        Append-Log "[STDERR] $line"
+            $errReader = $script:packagingState.ErrReader
+            if ($errReader) {
+                $newErr = $errReader.ReadToEnd()
+                if ($newErr) {
+                    foreach ($line in ($newErr -split "`r?`n")) {
+                        if ($line) {
+                            Append-Log "[STDERR] $line"
+                        }
                     }
                 }
             }
 
             # Check process completion
-            if ($proc.HasExited) {
-                $timer.Stop()
+            $proc = $script:packagingState.Process
+            if ($proc -and $proc.HasExited) {
+                $t = $script:packagingState.Timer
+                if ($t) { $t.Stop() }
 
                 # Final read flush
-                $finalOut = $outReader.ReadToEnd()
-                if ($finalOut) {
-                    foreach ($line in ($finalOut -split "`r?`n")) {
-                        if ($line) { Append-Log $line }
+                if ($outReader) {
+                    $finalOut = $outReader.ReadToEnd()
+                    if ($finalOut) {
+                        foreach ($line in ($finalOut -split "`r?`n")) {
+                            if ($line) { Append-Log $line }
+                        }
                     }
+                    $outReader.Close()
                 }
-                $finalErr = $errReader.ReadToEnd()
-                if ($finalErr) {
-                    foreach ($line in ($finalErr -split "`r?`n")) {
-                        if ($line) { Append-Log "[STDERR] $line" }
+                if ($errReader) {
+                    $finalErr = $errReader.ReadToEnd()
+                    if ($finalErr) {
+                        foreach ($line in ($finalErr -split "`r?`n")) {
+                            if ($line) { Append-Log "[STDERR] $line" }
+                        }
                     }
+                    $errReader.Close()
                 }
 
-                $outReader.Close()
-                $errReader.Close()
-                $outStream.Close()
-                $errStream.Close()
+                if ($script:packagingState.OutStream) { $script:packagingState.OutStream.Close() }
+                if ($script:packagingState.ErrStream) { $script:packagingState.ErrStream.Close() }
 
-                Remove-Item $tempOut, $tempErr -Force -ErrorAction SilentlyContinue
+                Remove-Item $script:packagingState.TempOut, $script:packagingState.TempErr -Force -ErrorAction SilentlyContinue
+
+                $exitCode = $proc.ExitCode
+                $totalSec = [Math]::Round(($elapsed).TotalSeconds, 1)
+
+                $script:packagingState = $null
 
                 $borderProgress.Visibility = [System.Windows.Visibility]::Collapsed
                 $btnStartPackaging.IsEnabled = $true
 
-                if ($proc.ExitCode -eq 0) {
-                    $totalSec = [Math]::Round(($elapsed).TotalSeconds, 1)
+                if ($exitCode -eq 0) {
                     Append-Log "Packaging workflow completed in $totalSec seconds!"
                     [System.Windows.MessageBox]::Show("Packaging completed successfully in $totalSec seconds!`nArtifacts generated in output directory.", "Success", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
                 } else {
-                    Append-Log "Process finished with exit code: $($proc.ExitCode)"
-                    [System.Windows.MessageBox]::Show("Packaging process finished with error exit code: $($proc.ExitCode)`nReview log for details.", "Packaging Issue", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning)
+                    Append-Log "Process finished with exit code: $exitCode"
+                    [System.Windows.MessageBox]::Show("Packaging process finished with error exit code: $exitCode`nReview log for details.", "Packaging Issue", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning)
                 }
             }
         })
@@ -386,6 +415,23 @@ $btnStartPackaging.Add_Click({
         Append-Log "[ERROR] $($_.Exception.Message)"
         $borderProgress.Visibility = [System.Windows.Visibility]::Collapsed
         $btnStartPackaging.IsEnabled = $true
+    }
+})
+
+# Clean up on window close
+$window.Add_Closing({
+    if ($script:packagingState) {
+        try {
+            if ($script:packagingState.Timer) { $script:packagingState.Timer.Stop() }
+            if ($script:packagingState.Process -and -not $script:packagingState.Process.HasExited) {
+                $script:packagingState.Process.Kill()
+            }
+            if ($script:packagingState.OutReader) { $script:packagingState.OutReader.Close() }
+            if ($script:packagingState.ErrReader) { $script:packagingState.ErrReader.Close() }
+            if ($script:packagingState.OutStream) { $script:packagingState.OutStream.Close() }
+            if ($script:packagingState.ErrStream) { $script:packagingState.ErrStream.Close() }
+            Remove-Item $script:packagingState.TempOut, $script:packagingState.TempErr -Force -ErrorAction SilentlyContinue
+        } catch {}
     }
 })
 
