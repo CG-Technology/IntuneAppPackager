@@ -57,7 +57,7 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
         </Border>
 
         <!-- Form Fields -->
-        <Border Grid.Row="1" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="18" Margin="0,0,0,16">
+        <Border Grid.Row="1" Background="#111827" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="18" Margin="0,0,0,16">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -89,13 +89,13 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
                 <!-- Action Strip -->
                 <StackPanel Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,0">
                     <CheckBox x:Name="ChkSkipPackaging" Content="Generate Detection Script Only (Skip .intunewin)" Foreground="#94A3B8" VerticalAlignment="Center" Margin="0,0,16,0"/>
-                    <Button x:Name="BtnStartPackaging" Content="Package &amp; Generate Detection" Background="#4F46E5" Foreground="#FFFFFF" BorderThickness="0" Padding="18,8" FontSize="14" FontWeight="Bold"/>
+                    <Button x:Name="BtnStartPackaging" Content="Package &amp; Generate Detection" Background="#6366F1" Foreground="#FFFFFF" BorderThickness="0" Padding="18,8" FontSize="14" FontWeight="Bold"/>
                 </StackPanel>
             </Grid>
         </Border>
 
         <!-- Progress Bar & Active Status Strip -->
-        <Border Grid.Row="2" x:Name="BorderProgress" Visibility="Collapsed" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="14,12" Margin="0,0,0,14">
+        <Border Grid.Row="2" x:Name="BorderProgress" Visibility="Collapsed" Background="#111827" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="14,12" Margin="0,0,0,14">
             <StackPanel>
                 <Grid Margin="0,0,0,8">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -105,12 +105,12 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
                     <TextBlock x:Name="TxtElapsed" Text="00:00" FontSize="12" FontWeight="Bold" Foreground="#818CF8" HorizontalAlignment="Right"/>
                 </Grid>
                 <ProgressBar x:Name="ProgressBar" Height="6" IsIndeterminate="True" 
-                             Background="#111827" Foreground="#6366F1" BorderBrush="#334155" BorderThickness="1"/>
+                             Background="#0B0F19" Foreground="#6366F1" BorderBrush="#334155" BorderThickness="1"/>
             </StackPanel>
         </Border>
 
         <!-- Log Output Console -->
-        <Border Grid.Row="3" Background="#060911" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="12">
+        <Border Grid.Row="3" Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="12">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -123,7 +123,7 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
 
         <!-- Footer -->
         <Grid Grid.Row="4" Margin="0,16,0,0">
-            <TextBlock Text="CG Technology | https://cg-technology.github.io" FontSize="12" Foreground="#475569" VerticalAlignment="Center"/>
+            <TextBlock Text="CG Technology | https://cg-technology.github.io" FontSize="12" Foreground="#64748B" VerticalAlignment="Center"/>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button x:Name="BtnOpenOutput" Content="Open Output Folder" Margin="0,0,10,0"/>
                 <Button x:Name="BtnClearLog" Content="Clear Log"/>
@@ -135,6 +135,20 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
 
 $reader = New-Object System.Xml.XmlNodeReader $xaml
 $window = [Windows.Markup.XamlReader]::Load($reader)
+
+# Load Window Icon
+$iconCandidates = @(
+    (Join-Path (Split-Path -Parent $scriptDir) "assets\IntuneAppPackager.ico"),
+    "c:\Users\VMUser\Documents\antigravity\IntuneAppPackager\assets\IntuneAppPackager.ico"
+)
+foreach ($cand in $iconCandidates) {
+    if (Test-Path $cand) {
+        try {
+            $window.Icon = [System.Windows.Media.Imaging.BitmapFrame]::Create([System.Uri]::new($cand))
+            break
+        } catch {}
+    }
+}
 
 # Element References
 $txtSourceFolder   = $window.FindName("TxtSourceFolder")
@@ -155,7 +169,12 @@ $btnClearLog       = $window.FindName("BtnClearLog")
 
 # Default values
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$defaultOutput = Join-Path (Split-Path -Parent $scriptDir) "output"
+if (-not $scriptDir) { $scriptDir = [System.AppDomain]::CurrentDomain.BaseDirectory.TrimEnd('\') }
+$defaultOutput = if (Test-Path (Join-Path $scriptDir "src")) {
+    Join-Path $scriptDir "output"
+} else {
+    Join-Path (Split-Path -Parent $scriptDir) "output"
+}
 $txtOutputFolder.Text = $defaultOutput
 
 function Append-Log([string]$msg) {
@@ -280,7 +299,13 @@ $btnStartPackaging.Add_Click({
     Append-Log "Output: $out"
 
     try {
-        $cliScript = Join-Path $scriptDir "IntunePackager.ps1"
+        $cliScript = if (Test-Path (Join-Path $scriptDir "IntunePackager.ps1")) {
+            Join-Path $scriptDir "IntunePackager.ps1"
+        } elseif (Test-Path (Join-Path $scriptDir "src\IntunePackager.ps1")) {
+            Join-Path $scriptDir "src\IntunePackager.ps1"
+        } else {
+            Join-Path (Split-Path -Parent $scriptDir) "src\IntunePackager.ps1"
+        }
         $cliArgs = @(
             "-SourceFolder", "`"$src`"",
             "-SetupFile", "`"$setup`"",
