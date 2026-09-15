@@ -199,7 +199,7 @@ function Ensure-ContentPrepTool {
     }
 
     # Check script folder
-    $scriptDir = Split-Path -Parent $PSCommandPath
+    $scriptDir = if ($PSCommandPath) { [System.IO.Path]::GetDirectoryName($PSCommandPath) } elseif ($PSScriptRoot) { $PSScriptRoot } else { "." }
     $prepExeInScript = Join-Path $scriptDir "IntuneWinAppUtil.exe"
     if (Test-Path $prepExeInScript) {
         return $prepExeInScript

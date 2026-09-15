@@ -6,6 +6,11 @@
     detection scripts for Microsoft Intune.
 #>
 
+[CmdletBinding()]
+param()
+
+$ErrorActionPreference = "SilentlyContinue"
+
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Windows.Forms
 
 [xml]$xaml = @"
@@ -133,10 +138,25 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
 </Window>
 "@
 
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-if (-not $scriptDir) {
-    $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { [System.AppDomain]::CurrentDomain.BaseDirectory.TrimEnd('\') }
+# Safe Directory Resolution
+$scriptDir = $null
+if ($PSScriptRoot) {
+    $scriptDir = $PSScriptRoot
+} elseif ($MyInvocation.MyCommand -and $MyInvocation.MyCommand.Path) {
+    $scriptDir = [System.IO.Path]::GetDirectoryName($MyInvocation.MyCommand.Path)
+} else {
+    try {
+        $mainMod = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+        if ($mainMod) { $scriptDir = [System.IO.Path]::GetDirectoryName($mainMod) }
+    } catch {}
+    if (-not $scriptDir) {
+        $scriptDir = [System.AppDomain]::CurrentDomain.BaseDirectory.TrimEnd('\')
+    }
 }
+if (-not $scriptDir -or -not (Test-Path $scriptDir)) {
+    $scriptDir = [System.IO.Directory]::GetCurrentDirectory()
+}
+$parentDir = if ($scriptDir) { [System.IO.Path]::GetDirectoryName($scriptDir) } else { $null }
 
 $reader = New-Object System.Xml.XmlNodeReader $xaml
 $window = [Windows.Markup.XamlReader]::Load($reader)
@@ -146,13 +166,13 @@ $iconLoaded = $false
 $iconCandidates = @(
     (Join-Path $scriptDir "IntuneAppPackager.ico"),
     (Join-Path $scriptDir "assets\IntuneAppPackager.ico"),
-    (Join-Path (Split-Path -Parent $scriptDir) "IntuneAppPackager.ico"),
-    (Join-Path (Split-Path -Parent $scriptDir) "assets\IntuneAppPackager.ico"),
+    (if ($parentDir) { Join-Path $parentDir "IntuneAppPackager.ico" }),
+    (if ($parentDir) { Join-Path $parentDir "assets\IntuneAppPackager.ico" }),
     "C:\Users\VMUser\Documents\antigravity\IntuneAppPackager\IntuneAppPackager.ico",
     "C:\Users\VMUser\Documents\antigravity\IntuneAppPackager\assets\IntuneAppPackager.ico"
 )
 foreach ($cand in $iconCandidates) {
-    if (Test-Path $cand) {
+    if ($cand -and (Test-Path $cand)) {
         try {
             $window.Icon = [System.Windows.Media.Imaging.BitmapFrame]::Create([System.Uri]::new($cand))
             $iconLoaded = $true
@@ -179,11 +199,7 @@ $btnOpenOutput     = $window.FindName("BtnOpenOutput")
 $btnClearLog       = $window.FindName("BtnClearLog")
 
 # Default values
-$defaultOutput = if (Test-Path (Join-Path $scriptDir "src")) {
-    Join-Path $scriptDir "output"
-} else {
-    Join-Path (Split-Path -Parent $scriptDir) "output"
-}
+$defaultOutput = Join-Path $scriptDir "output"
 $txtOutputFolder.Text = $defaultOutput
 
 function Append-Log([string]$msg) {
@@ -312,8 +328,12 @@ $btnStartPackaging.Add_Click({
             Join-Path $scriptDir "IntunePackager.ps1"
         } elseif (Test-Path (Join-Path $scriptDir "src\IntunePackager.ps1")) {
             Join-Path $scriptDir "src\IntunePackager.ps1"
+        } elseif ($parentDir -and (Test-Path (Join-Path $parentDir "src\IntunePackager.ps1"))) {
+            Join-Path $parentDir "src\IntunePackager.ps1"
+        } elseif ($parentDir -and (Test-Path (Join-Path $parentDir "IntunePackager.ps1"))) {
+            Join-Path $parentDir "IntunePackager.ps1"
         } else {
-            Join-Path (Split-Path -Parent $scriptDir) "src\IntunePackager.ps1"
+            Join-Path $scriptDir "src\IntunePackager.ps1"
         }
         $cliArgs = @(
             "-SourceFolder", "`"$src`"",
