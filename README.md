@@ -1,5 +1,7 @@
-﻿# Intune App Packager
+# 📦 Intune App Packager
 
+[![Release](https://img.shields.io/github/v/release/CG-Technology/IntuneAppPackager?color=6366F1&label=Release)](https://github.com/CG-Technology/IntuneAppPackager/releases)
+[![Download EXE](https://img.shields.io/badge/Download-IntuneAppPackager.exe-10B981.svg)](https://github.com/CG-Technology/IntuneAppPackager/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue.svg)](https://www.microsoft.com/windows)
 [![Architecture](https://img.shields.io/badge/engine-PowerShell%20%7C%20WPF-indigo.svg)](https://learn.microsoft.com/powershell/)
 [![Packaging](https://img.shields.io/badge/intunewin-Win32%20Prep%20Tool-purple.svg)](https://github.com/microsoft/Microsoft-Win32-Content-Prep-Tool)
@@ -8,10 +10,13 @@
 
 An automated Win32 (`.intunewin`) packaging engine and dynamic PowerShell detection script generator engineered for systems administrators, enterprise IT teams, and Managed Service Providers (MSPs) deploying software via Microsoft Intune.
 
+Includes both a standalone Windows GUI application (`IntuneAppPackager.exe` with custom multi-resolution application icon) and a scriptable CLI automation engine.
+
 ---
 
 ## Key Features
 
+- **Standalone Portable Desktop Executable**: Zero external dependencies, high-DPI scaling, embedded multi-resolution icon (`IntuneAppPackager.ico`), and modern slate dark UI (`#0B0F19`).
 - **Automated `.intunewin` Compilation**: Automatically wraps Microsoft's Win32 Content Prep Tool (`IntuneWinAppUtil.exe`) into an intuitive GUI and headless batch CLI workflow.
 - **Installer Engine Inspection**:
   - **MSI Installers**: Automatically queries the Windows Installer COM database to extract `ProductName`, `ProductVersion`, `Manufacturer`, and `ProductCode` (GUID).
@@ -28,7 +33,13 @@ An automated Win32 (`.intunewin`) packaging engine and dynamic PowerShell detect
 
 ## Quick Start
 
-### 1. Launch Interactive GUI Studio
+### 1. Launch Standalone GUI Studio (.EXE)
+Simply double-click **`IntuneAppPackager.exe`** for an instant desktop experience with zero PowerShell prompts or console windows:
+```powershell
+.\IntuneAppPackager.exe
+```
+
+### 2. Launch via PowerShell Script
 ```powershell
 .\Run-Packager.ps1
 ```

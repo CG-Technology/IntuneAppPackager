@@ -133,18 +133,29 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
 </Window>
 "@
 
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+if (-not $scriptDir) {
+    $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { [System.AppDomain]::CurrentDomain.BaseDirectory.TrimEnd('\') }
+}
+
 $reader = New-Object System.Xml.XmlNodeReader $xaml
 $window = [Windows.Markup.XamlReader]::Load($reader)
 
 # Load Window Icon
+$iconLoaded = $false
 $iconCandidates = @(
+    (Join-Path $scriptDir "IntuneAppPackager.ico"),
+    (Join-Path $scriptDir "assets\IntuneAppPackager.ico"),
+    (Join-Path (Split-Path -Parent $scriptDir) "IntuneAppPackager.ico"),
     (Join-Path (Split-Path -Parent $scriptDir) "assets\IntuneAppPackager.ico"),
-    "c:\Users\VMUser\Documents\antigravity\IntuneAppPackager\assets\IntuneAppPackager.ico"
+    "C:\Users\VMUser\Documents\antigravity\IntuneAppPackager\IntuneAppPackager.ico",
+    "C:\Users\VMUser\Documents\antigravity\IntuneAppPackager\assets\IntuneAppPackager.ico"
 )
 foreach ($cand in $iconCandidates) {
     if (Test-Path $cand) {
         try {
             $window.Icon = [System.Windows.Media.Imaging.BitmapFrame]::Create([System.Uri]::new($cand))
+            $iconLoaded = $true
             break
         } catch {}
     }
@@ -168,8 +179,6 @@ $btnOpenOutput     = $window.FindName("BtnOpenOutput")
 $btnClearLog       = $window.FindName("BtnClearLog")
 
 # Default values
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-if (-not $scriptDir) { $scriptDir = [System.AppDomain]::CurrentDomain.BaseDirectory.TrimEnd('\') }
 $defaultOutput = if (Test-Path (Join-Path $scriptDir "src")) {
     Join-Path $scriptDir "output"
 } else {
