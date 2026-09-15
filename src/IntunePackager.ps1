@@ -454,7 +454,7 @@ if ($SkipPackaging) {
             "-q"
         )
 
-        $proc = Start-Process -FilePath $prepTool -ArgumentList ($prepArgs -join " ") -Wait -PassThru -NoNewWindow
+        $proc = Start-Process -FilePath $prepTool -ArgumentList ($prepArgs -join " ") -Wait -PassThru -WindowStyle Hidden
         if ($proc.ExitCode -eq 0 -and (Test-Path $intuneWinPath)) {
             $pkgSize = (Get-Item $intuneWinPath).Length
             $pkgSizeMB = [Math]::Round($pkgSize / 1MB, 2)
