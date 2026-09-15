@@ -169,14 +169,17 @@ $window = [Windows.Markup.XamlReader]::Load($reader)
 
 # Load Window Icon
 $iconLoaded = $false
-$iconCandidates = @(
-    (Join-Path $scriptDir "IntuneAppPackager.ico"),
-    (Join-Path $scriptDir "assets\IntuneAppPackager.ico"),
-    (if ($parentDir) { Join-Path $parentDir "IntuneAppPackager.ico" }),
-    (if ($parentDir) { Join-Path $parentDir "assets\IntuneAppPackager.ico" }),
-    "C:\Users\VMUser\Documents\antigravity\IntuneAppPackager\IntuneAppPackager.ico",
-    "C:\Users\VMUser\Documents\antigravity\IntuneAppPackager\assets\IntuneAppPackager.ico"
-)
+$iconCandidates = New-Object System.Collections.Generic.List[string]
+if ($scriptDir) {
+    $iconCandidates.Add((Join-Path $scriptDir "IntuneAppPackager.ico"))
+    $iconCandidates.Add((Join-Path $scriptDir "assets\IntuneAppPackager.ico"))
+}
+if ($parentDir) {
+    $iconCandidates.Add((Join-Path $parentDir "IntuneAppPackager.ico"))
+    $iconCandidates.Add((Join-Path $parentDir "assets\IntuneAppPackager.ico"))
+}
+$iconCandidates.Add("C:\Users\VMUser\Documents\antigravity\IntuneAppPackager\IntuneAppPackager.ico")
+$iconCandidates.Add("C:\Users\VMUser\Documents\antigravity\IntuneAppPackager\assets\IntuneAppPackager.ico")
 foreach ($cand in $iconCandidates) {
     if ($cand -and (Test-Path $cand)) {
         try {
@@ -346,12 +349,15 @@ $btnStartPackaging.Add_Click({
 
     try {
         $cliScript = $null
-        $candidates = @(
-            (Join-Path $scriptDir "IntunePackager.ps1"),
-            (Join-Path $scriptDir "src\IntunePackager.ps1"),
-            (if ($parentDir) { Join-Path $parentDir "src\IntunePackager.ps1" }),
-            (if ($parentDir) { Join-Path $parentDir "IntunePackager.ps1" })
-        )
+        $candidates = New-Object System.Collections.Generic.List[string]
+        if ($scriptDir) {
+            $candidates.Add((Join-Path $scriptDir "IntunePackager.ps1"))
+            $candidates.Add((Join-Path $scriptDir "src\IntunePackager.ps1"))
+        }
+        if ($parentDir) {
+            $candidates.Add((Join-Path $parentDir "src\IntunePackager.ps1"))
+            $candidates.Add((Join-Path $parentDir "IntunePackager.ps1"))
+        }
         foreach ($c in $candidates) {
             if ($c -and (Test-Path $c)) {
                 $cliScript = $c
